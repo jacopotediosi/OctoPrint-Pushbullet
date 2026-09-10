@@ -23,7 +23,9 @@ $(function() {
                     if (response.result) {
                         new PNotify({
                             title: gettext("Test message sent"),
+                            title_escape: true,
                             text: gettext("A test message was sent to Pushbullet"),
+                            text_escape: true,
                             type: "success"
                         });
                     } else {
@@ -37,7 +39,9 @@ $(function() {
                         }
                         new PNotify({
                             title: gettext("Test message could not be sent"),
+                            title_escape: true,
                             text: text,
+                            text_escape: true,
                             type: "error"
                         });
                     }
