@@ -187,6 +187,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			dict(type="settings", name="Pushbullet", custom_bindings=True)
 		]
 
+	def is_template_autoescaped(self):
+		return True
+
 	#~~ AssetPlugin API
 
 	def get_assets(self):
