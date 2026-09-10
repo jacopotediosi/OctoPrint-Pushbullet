@@ -9,7 +9,6 @@ __plugin_pythoncompat__ = ">=2.7,<4"
 import os
 
 import time
-import octoprint.util
 import octoprint.plugin
 
 from octoprint.events import Events
@@ -18,9 +17,7 @@ from flask_login import current_user
 
 import pushbullet
 import flask
-import datetime
 import sarge
-import collections
 import threading
 
 
@@ -330,7 +327,8 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
 		if filename is None:
-			import random, string
+			import random
+			import string
 			filename = "test-{}.jpg".format("".join([random.choice(string.ascii_letters) for _ in range(16)]))
 
 		if sender is None:
