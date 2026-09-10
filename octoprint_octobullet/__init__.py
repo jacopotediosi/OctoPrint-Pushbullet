@@ -12,8 +12,7 @@ import time
 import octoprint.plugin
 
 from octoprint.events import Events
-from octoprint.server import admin_permission
-from flask_login import current_user
+from octoprint.access.permissions import Permissions
 
 import pushbullet
 import flask
@@ -130,17 +129,6 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	#~~ SettingsPlugin
 
-	def on_settings_load(self):
-		data = octoprint.plugin.SettingsPlugin.on_settings_load(self)
-
-		# only return our restricted settings to admin users - this is only needed for OctoPrint <= 1.2.16
-		restricted = ("access_token", "push_channel")
-		for r in restricted:
-			if r in data and (current_user is None or current_user.is_anonymous() or not current_user.is_admin()):
-				data[r] = None
-
-		return data
-
 	def on_settings_save(self, data):
 		if "periodic_updates_interval" in data:
 			try:
@@ -190,7 +178,6 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		)
 
 	def get_settings_restricted_paths(self):
-		# only used in OctoPrint versions > 1.2.16
 		return dict(admin=[["access_token"], ["push_channel"]])
 
 	#~~ TemplatePlugin API
@@ -211,7 +198,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		return dict(test=["token"])
 
 	def on_api_command(self, command, data):
-		if not admin_permission.can():
+		if not Permissions.SETTINGS.can():
 			return flask.make_response("Insufficient rights", 403)
 
 		if not command == "test":
