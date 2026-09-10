@@ -100,7 +100,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		try:
 			self._bullet, self._sender = self._create_sender(apikey, channel=channel_name)
 		except NoSuchChannel:
-			self._logger.warn("Could not find channel {}, please check your configuration!".format(channel_name))
+			self._logger.warning("Could not find channel {}, please check your configuration!".format(channel_name))
 			self._bullet, self._sender = self._create_sender(apikey)
 		except pushbullet.InvalidKeyError:
 			self._logger.error("Invalid Pushbullet API key, please check your configuration!")
@@ -354,7 +354,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 				if self._send_file(sender, tempFile.name, filename, title + " " + body):
 					return True
-				self._logger.warn("Could not send a file message with the webcam image, sending only a note")
+				self._logger.warning("Could not send a file message with the webcam image, sending only a note")
 
 		return self._send_note(sender, title, body)
 
@@ -399,7 +399,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 						self._logger.info("Connected to PushBullet on channel {}".format(channel))
 						break
 				else:
-					self._logger.warn("Could not find channel {}, please check your configuration!".format(channel))
+					self._logger.warning("Could not find channel {}, please check your configuration!".format(channel))
 					raise NoSuchChannel(channel)
 
 			self._logger.info("Connected to PushBullet")
@@ -438,7 +438,7 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if p.returncode == 0:
 			self._logger.info("Rotated/flipped image with ffmpeg")
 		else:
-			self._logger.warn("Failed to rotate/flip image with ffmpeg, "
+			self._logger.warning("Failed to rotate/flip image with ffmpeg, "
 			                  "got return code {}: {}, {}".format(p.returncode,
 			                                                      p.stdout.text,
 			                                                      p.stderr.text))
