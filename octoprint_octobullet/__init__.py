@@ -197,6 +197,9 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 	def get_api_commands(self):
 		return dict(test=["token"])
 
+	def is_api_protected(self):
+		return True
+
 	def on_api_command(self, command, data):
 		if not Permissions.SETTINGS.can():
 			return flask.make_response("Insufficient rights", 403)
