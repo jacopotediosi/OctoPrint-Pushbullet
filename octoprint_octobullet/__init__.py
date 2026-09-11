@@ -7,16 +7,26 @@ __copyright__ = "Copyright (C) 2015 The OctoPrint Project - Released under terms
 __plugin_pythoncompat__ = ">=2.7,<4"
 
 import os
-
+import random
+import string
+import tempfile
 import time
 import octoprint.plugin
 
 from octoprint.events import Events
 from octoprint.access.permissions import Permissions
 
+try:
+	from octoprint.webcams import get_snapshot_webcam
+except ImportError: # OctoPrint < 1.9.0
+	get_snapshot_webcam = None
+
 import pushbullet
 import flask
+import requests
 import threading
+
+from PIL import Image, ImageOps
 
 
 _TIME_REMAINING_FORMAT = "{hours:d}h {minutes:d}min"
@@ -144,7 +154,6 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 		octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
 
-		import threading
 		thread = threading.Thread(target=self._connect_bullet, args=(self._settings.get(["access_token"]),
 		                                                             self._settings.get(["push_channel"])))
 		thread.daemon = True
@@ -318,16 +327,13 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
 	def _get_snapshot_source(self):
-		try:
-			from octoprint.webcams import get_snapshot_webcam
-		except ImportError: # OctoPrint < 1.9.0
+		if get_snapshot_webcam is None: # OctoPrint < 1.9.0
 			snapshot_url = self._settings.global_get(["webcam", "snapshot"])
 			if not snapshot_url:
 				return None
 
 			def take_snapshot():
-				from requests import get
-				response = get(snapshot_url, verify=False, stream=True)
+				response = requests.get(snapshot_url, verify=False, stream=True)
 				response.raise_for_status()
 				return response.iter_content(chunk_size=1024)
 
@@ -347,8 +353,6 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
 		if filename is None:
-			import random
-			import string
 			filename = "test-{}.jpg".format("".join([random.choice(string.ascii_letters) for _ in range(16)]))
 
 		if sender is None:
@@ -361,7 +365,6 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if snapshot_source:
 			take_snapshot, hflip, vflip, rotate = snapshot_source
 			try:
-				import tempfile
 				tempFile = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
 				for chunk in take_snapshot():
 					tempFile.write(chunk)
@@ -439,8 +442,6 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			return
 
 		try:
-			from PIL import Image, ImageOps
-
 			with Image.open(snapshot_path) as image:
 				processed = image
 				if hflip:
