@@ -16,7 +16,6 @@ from octoprint.access.permissions import Permissions
 
 import pushbullet
 import flask
-import sarge
 import threading
 
 
@@ -318,6 +317,34 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 
 			self._send_message_with_webcam_image(title, body, filename=filename)
 
+	def _get_snapshot_source(self):
+		try:
+			from octoprint.webcams import get_snapshot_webcam
+		except ImportError: # OctoPrint < 1.9.0
+			snapshot_url = self._settings.global_get(["webcam", "snapshot"])
+			if not snapshot_url:
+				return None
+
+			def take_snapshot():
+				from requests import get
+				response = get(snapshot_url, verify=False, stream=True)
+				response.raise_for_status()
+				return response.iter_content(chunk_size=1024)
+
+			return (take_snapshot,
+			        self._settings.global_get_boolean(["webcam", "flipH"]),
+			        self._settings.global_get_boolean(["webcam", "flipV"]),
+			        self._settings.global_get_boolean(["webcam", "rotate90"]))
+
+		webcam = get_snapshot_webcam()
+		if webcam is None or not webcam.config.canSnapshot:
+			return None
+
+		return (lambda: webcam.providerPlugin.take_webcam_snapshot(webcam.config.name),
+		        webcam.config.flipH,
+		        webcam.config.flipV,
+		        webcam.config.rotate90)
+
 	def _send_message_with_webcam_image(self, title, body, filename=None, sender=None):
 		if filename is None:
 			import random
@@ -330,30 +357,22 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 		if not sender:
 			return False
 
-		snapshot_url = self._settings.global_get(["webcam", "snapshot"])
-		if snapshot_url:
+		snapshot_source = self._get_snapshot_source()
+		if snapshot_source:
+			take_snapshot, hflip, vflip, rotate = snapshot_source
 			try:
-				from requests import get
 				import tempfile
-				tempFile = tempfile.NamedTemporaryFile(delete=False)
-				response = get(
-					snapshot_url,
-					verify=False
-                )
-				response.raise_for_status()
-				tempFile.write(response.content)
+				tempFile = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+				for chunk in take_snapshot():
+					tempFile.write(chunk)
 				tempFile.close()
 			except Exception as e:
 				self._logger.exception(
 					"Exception while fetching snapshot from webcam, sending only a note: {message}".format(
 						message=str(e)))
 			else:
-				# ffmpeg can't guess file type it seems
-				os.rename(tempFile.name, tempFile.name + ".jpg")
-				tempFile.name += ".jpg"
-
-				# flip or rotate as needed
-				self._process_snapshot(tempFile)
+				# Flip or rotate as needed
+				self._process_snapshot(tempFile.name, hflip, vflip, rotate)
 
 				if self._send_file(sender, tempFile.name, filename, title + " " + body):
 					return True
@@ -415,36 +434,28 @@ class PushbulletPlugin(octoprint.plugin.EventHandlerPlugin,
 			self._logger.exception("Error while instantiating PushBullet")
 			return None, None
 
-	def _process_snapshot(self, snapshot_path, pixfmt="yuv420p"):
-		hflip  = self._settings.global_get_boolean(["webcam", "flipH"])
-		vflip  = self._settings.global_get_boolean(["webcam", "flipV"])
-		rotate = self._settings.global_get_boolean(["webcam", "rotate90"])
-		ffmpeg = self._settings.global_get(["webcam", "ffmpeg"])
-		
-		if not ffmpeg or not os.access(ffmpeg, os.X_OK) or (not vflip and not hflip and not rotate):
+	def _process_snapshot(self, snapshot_path, hflip, vflip, rotate):
+		if not hflip and not vflip and not rotate:
 			return
 
-		ffmpeg_command = [ffmpeg, "-y", "-i", snapshot_path]
+		try:
+			from PIL import Image, ImageOps
 
-		rotate_params = ["format={}".format(pixfmt)] # workaround for foosel/OctoPrint#1317
-		if rotate:
-			rotate_params.append("transpose=2") # 90 degrees counter clockwise
-		if hflip:
-			rotate_params.append("hflip") 		# horizontal flip
-		if vflip:
-			rotate_params.append("vflip")		# vertical flip
+			with Image.open(snapshot_path) as image:
+				processed = image
+				if hflip:
+					processed = ImageOps.mirror(processed)
+				if vflip:
+					processed = ImageOps.flip(processed)
+				if rotate:
+					processed = processed.rotate(90, expand=True)
 
-		ffmpeg_command += ["-vf", sarge.shell_quote(",".join(rotate_params)), snapshot_path]
-		self._logger.info("Running: {}".format(" ".join(ffmpeg_command)))
+				if processed.mode not in ("L", "RGB"):
+					processed = processed.convert("RGB")
 
-		p = sarge.run(ffmpeg_command, stdout=sarge.Capture(), stderr=sarge.Capture())
-		if p.returncode == 0:
-			self._logger.info("Rotated/flipped image with ffmpeg")
-		else:
-			self._logger.warning("Failed to rotate/flip image with ffmpeg, "
-			                  "got return code {}: {}, {}".format(p.returncode,
-			                                                      p.stdout.text,
-			                                                      p.stderr.text))
+				processed.save(snapshot_path)
+		except Exception:
+			self._logger.exception("Could not rotate/flip the snapshot, sending it unprocessed")
 
 
 class NoSuchChannel(Exception):
